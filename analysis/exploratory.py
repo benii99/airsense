@@ -288,7 +288,7 @@ def analyze_air_quality_data(df, output_dir=None, debug_dir=None):
     # Identify pollutant columns and check which ones have valid data
     time_col = 'time'
     potential_pollutant_cols = [
-        'pm10', 'pm2_5', 'nitrogen_dioxide', 'carbon_monoxide', 'sulphur_dioxide', 'ozone'
+        'pm10', 'pm2_5', 'nitrogen_dioxide', 'carbon_monoxide', 'sulphur_dioxide', 'ozone', 'AQI'
     ]
     
     # Filter to only include columns with sufficient valid data

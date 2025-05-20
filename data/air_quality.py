@@ -8,6 +8,7 @@ import pandas as pd
 import logging
 from datetime import datetime, timedelta
 from config import AIR_QUALITY_API_URL, POLLUTANTS, DEFAULT_HISTORY_DAYS
+from data.aqi_calculator import calculate_aqi
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,11 @@ def get_air_quality_data(latitude, longitude, start_date=None, end_date=None, da
         logger.info(f"Successfully fetched {len(df)} hours of air quality data")
         if len(df) > 0:
             logger.info(f"Date range: {df['time'].min()} to {df['time'].max()}")
+        
+        # Calculate AQI for the fetched data
+        if len(df) > 0:
+            df = calculate_aqi(df)
+            logger.info(f"Added AQI calculations to air quality data")
             
         return df
         
