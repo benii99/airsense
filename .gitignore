@@ -5,3 +5,4 @@ __pycache__
 *.log
 /debug_data
 /figures
+.DS_Store

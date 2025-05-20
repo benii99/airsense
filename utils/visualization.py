@@ -131,10 +131,17 @@ def plot_average_by_hour(df, value_col='traffic_count', figsize=(12, 6), output_
     ax.set_xticks(range(24))
     ax.set_xlim(-0.5, 23.5)
     
-    # Add values above points
+    # Make y-axis 15% taller to accommodate labels
+    y_min, y_max = ax.get_ylim()
+    y_range = y_max - y_min
+    ax.set_ylim(y_min, y_max + y_range * 0.15)
+    
+    # Add values above points with improved positioning
     for i, v in enumerate(hourly_avg[value_col]):
-        ax.text(hourly_avg['hour_of_day'].iloc[i], v + (v * 0.03), 
-                f"{v:.1f}", ha='center', fontsize=9)
+        # Position labels with adequate vertical spacing and limit decimal places
+        ax.text(hourly_avg['hour_of_day'].iloc[i], v + (y_range * 0.025), 
+                f"{v:.1f}", ha='center', fontsize=9, 
+                bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', pad=1))
     
     plt.tight_layout()
     
@@ -147,6 +154,7 @@ def plot_average_by_hour(df, value_col='traffic_count', figsize=(12, 6), output_
         logger.info(f"Saved hourly average plot to {output_path}")
     
     return fig
+
 
 def plot_hourly_boxplots(df, value_col='traffic_count', figsize=(15, 8), output_path=None):
     """
