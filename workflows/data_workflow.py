@@ -10,6 +10,7 @@ from datetime import datetime
 import config
 from data import traffic, air_quality, weather, data_merger
 from analysis import exploratory
+from analysis import transformation
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +118,62 @@ def fetch_and_analyze_data(location_name, coordinates, year):
             complete_rows = merged_data.dropna().shape[0]
             print(f"Complete rows: {complete_rows} ({complete_rows/len(merged_data)*100:.1f}%)")
         
-        datasets['merged'] = merged_data
+        # Perform time series transformation analysis
+        print("\nPerforming time series transformation analysis...")
+        
+        # Define relevant metrics for analysis
+        metrics = []
+        
+        # Add pollutant metrics
+        pollutant_metrics = ['pm10', 'pm2_5', 'nitrogen_dioxide', 'carbon_monoxide', 
+                            'sulphur_dioxide', 'ozone', 'AQI']
+        metrics.extend([m for m in pollutant_metrics if m in merged_data.columns])
+        
+        # Add weather metrics
+        weather_metrics = ['temperature_2m', 'relative_humidity_2m', 'precipitation', 
+                          'windspeed_10m', 'pressure_msl', 'winddirection_10m']
+        metrics.extend([m for m in weather_metrics if m in merged_data.columns])
+        
+        # Add traffic metrics
+        if 'traffic_count' in merged_data.columns:
+            metrics.append('traffic_count')
+            
+        # Create transformation analysis directory
+        transform_dir = os.path.join(config.FIGURES_DIR, "transformations")
+        os.makedirs(transform_dir, exist_ok=True)
+        
+        # Analyze metrics
+        print(f"Analyzing distributions for {len(metrics)} metrics...")
+        analysis_results = transformation.analyze_metrics(
+            merged_data,
+            metrics=metrics,
+            output_dir=transform_dir
+        )
+        
+        # Create transformed dataset
+        print("Creating transformed dataset...")
+        transformed_data = transformation.create_transformed_dataset(
+            merged_data, 
+            analysis_results=analysis_results,
+            output_dir=config.DEBUG_DIR
+        )
+        
+        # Save transformed data
+        filename = f"transformed_data_{location_name.replace(' ', '_')}_{year}"
+        saved_file = exploratory.save_data_to_csv(transformed_data, filename, config.DEBUG_DIR)
+        if saved_file:
+            print(f"Saved transformed data to {saved_file}")
+            print(f"Records: {len(transformed_data)}")
+            print(f"Added {len(transformed_data.columns) - len(merged_data.columns)} transformed columns")
+        
+        # Add transformed data to datasets
+        datasets['transformed'] = transformed_data
+        
+        # Save analysis results
+        analysis_file = os.path.join(config.DEBUG_DIR, "transformation_analysis.csv")
+        analysis_results.to_csv(analysis_file, index=False)
+        print(f"Saved transformation analysis to {analysis_file}")
+            
     else:
         print("Failed to create merged dataset")
         datasets['merged'] = None
