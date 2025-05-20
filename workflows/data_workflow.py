@@ -9,8 +9,7 @@ import pandas as pd
 from datetime import datetime
 import config
 from data import traffic, air_quality, weather, data_merger
-from analysis import exploratory
-from analysis import transformation
+from analysis import exploratory, transformation, correlation
 
 logger = logging.getLogger(__name__)
 
@@ -173,6 +172,34 @@ def fetch_and_analyze_data(location_name, coordinates, year):
         analysis_file = os.path.join(config.DEBUG_DIR, "transformation_analysis.csv")
         analysis_results.to_csv(analysis_file, index=False)
         print(f"Saved transformation analysis to {analysis_file}")
+        
+        # Perform correlation analysis
+        print("\nPerforming correlation analysis on original and transformed data...")
+        
+        # Create correlation analysis directory
+        correlation_dir = os.path.join(config.FIGURES_DIR, "correlations")
+        os.makedirs(correlation_dir, exist_ok=True)
+        
+        # Run correlation analysis
+        corr_results = correlation.analyze_correlations(
+            transformed_data,
+            metrics=metrics,
+            output_dir=correlation_dir
+        )
+        
+        if corr_results:
+            # Add correlation results to datasets
+            datasets['correlation'] = corr_results
+            print(f"Correlation analysis complete. Results saved to {correlation_dir}")
+            
+            # Save correlation metrics summary if available
+            if 'comparison' in corr_results and corr_results['comparison'] is not None:
+                comp_df = corr_results['comparison']
+                comp_file = os.path.join(config.DEBUG_DIR, "correlation_improvements.csv")
+                comp_df.to_csv(comp_file, index=False)
+                print(f"Saved correlation improvement metrics to {comp_file}")
+        else:
+            print("Correlation analysis failed or produced no results")
             
     else:
         print("Failed to create merged dataset")
