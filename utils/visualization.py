@@ -305,3 +305,113 @@ def create_joint_pollutant_visualizations(df, pollutant_cols, time_col='time', o
     plt.tight_layout()
     plt.savefig(f"{output_dir}/{timestamp}_pollutant_correlation_heatmap.png", dpi=300)
     plt.close()
+
+def create_joint_weather_visualizations(df, weather_cols, time_col='time', output_dir=None):
+    """
+    Create joint visualizations for multiple weather variables.
+    
+    Args:
+        df: DataFrame with weather data
+        weather_cols: List of column names for weather variables
+        time_col: Column name for time data
+        output_dir: Directory to save output figures
+    """
+    if not weather_cols or len(weather_cols) == 0:
+        return
+    
+    # Create timestamp for filenames
+    timestamp = datetime.now().strftime("%Y%m%d")
+    
+    # Ensure output directory exists
+    if output_dir is None:
+        output_dir = "figures/weather_eda"
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # 1. Create time series plot for all weather variables (normalized)
+    plt.figure(figsize=(15, 8))
+    
+    for variable in weather_cols:
+        # Scale value to fit on same plot (normalize to 0-1)
+        series = df[variable]
+        if series.max() == series.min():
+            # Handle constant case
+            normalized = series / series.max() if series.max() != 0 else series
+        else:
+            normalized = (series - series.min()) / (series.max() - series.min())
+        
+        plt.plot(df[time_col], normalized, label=variable, alpha=0.7)
+    
+    plt.title("Normalized Weather Variables Over Time")
+    plt.xlabel("Time")
+    plt.ylabel("Normalized Value (0-1)")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}/{timestamp}_joint_weather_timeseries.png", dpi=300)
+    plt.close()
+    
+    # 2. Create hourly average comparison
+    df_with_hour = df.copy()
+    df_with_hour['hour_of_day'] = df_with_hour[time_col].dt.hour
+    
+    hourly_avgs = {}
+    for variable in weather_cols:
+        hourly_avgs[variable] = df_with_hour.groupby('hour_of_day')[variable].mean()
+    
+    # Plot in two subplots to avoid overcrowding
+    plt.figure(figsize=(18, 10))
+    
+    # First half of variables
+    ax1 = plt.subplot(2, 1, 1)
+    for i, (variable, values) in enumerate(hourly_avgs.items()):
+        if i < len(hourly_avgs) // 2:
+            ax1.plot(values.index, values.values, 'o-', label=variable, alpha=0.7)
+    
+    ax1.set_title("Average Weather Variables by Hour of Day (Part 1)")
+    ax1.set_xlabel("Hour of Day")
+    ax1.set_ylabel("Value")
+    ax1.legend()
+    ax1.set_xticks(range(24))
+    ax1.grid(True, alpha=0.3)
+    
+    # Second half of variables
+    ax2 = plt.subplot(2, 1, 2)
+    for i, (variable, values) in enumerate(hourly_avgs.items()):
+        if i >= len(hourly_avgs) // 2:
+            ax2.plot(values.index, values.values, 'o-', label=variable, alpha=0.7)
+    
+    ax2.set_title("Average Weather Variables by Hour of Day (Part 2)")
+    ax2.set_xlabel("Hour of Day")
+    ax2.set_ylabel("Value")
+    ax2.legend()
+    ax2.set_xticks(range(24))
+    ax2.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}/{timestamp}_joint_weather_hourly_averages.png", dpi=300)
+    plt.close()
+    
+    # 3. Create histograms for all weather variables
+    fig, axes = plt.subplots(len(weather_cols), 1, figsize=(12, 3*len(weather_cols)))
+    
+    for i, variable in enumerate(weather_cols):
+        ax = axes[i] if len(weather_cols) > 1 else axes
+        
+        ax.hist(df[variable].dropna(), bins=50, alpha=0.7)
+        ax.set_title(f"Distribution of {variable}")
+        ax.set_xlabel("Value")
+        ax.set_ylabel("Frequency")
+        ax.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}/{timestamp}_joint_weather_histograms.png", dpi=300)
+    plt.close()
+    
+    # 4. Create correlation heatmap between weather variables
+    plt.figure(figsize=(12, 10))
+    corr_matrix = df[weather_cols].corr()
+    sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', vmin=-1, vmax=1, center=0)
+    plt.title("Correlation Between Weather Variables")
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}/{timestamp}_weather_correlation_heatmap.png", dpi=300)
+    plt.close()

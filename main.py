@@ -7,7 +7,7 @@ import sys
 import logging
 from datetime import datetime
 import config
-from data import traffic, air_quality
+from data import traffic, air_quality, weather
 from analysis import exploratory
 
 # Configure logging
@@ -39,9 +39,8 @@ def main():
     start_date = f"{config.TRAFFIC_YEAR}-01-01"
     end_date = f"{config.TRAFFIC_YEAR}-12-31"
     
-    print(f"\nFetching air quality data for {first_location} ({config.TRAFFIC_YEAR})...")
-    
     # Fetch air quality data
+    print(f"\nFetching air quality data for {first_location} ({config.TRAFFIC_YEAR})...")
     air_quality_data = air_quality.get_air_quality_data(
         latitude=coordinates[0],
         longitude=coordinates[1],
@@ -58,6 +57,36 @@ def main():
         )
     else:
         print(f"Failed to fetch air quality data for {first_location}")
+    
+    # Fetch weather data
+    print(f"\nFetching weather data for {first_location} ({config.TRAFFIC_YEAR})...")
+    weather_data = weather.get_weather_data(
+        latitude=coordinates[0],
+        longitude=coordinates[1],
+        start_date=start_date,
+        end_date=end_date
+    )
+    
+    if weather_data is not None:
+        # Save debug data
+        filename = f"weather_data_{first_location.replace(' ', '_')}"
+        saved_file = exploratory.save_data_to_csv(weather_data, filename, config.DEBUG_DIR)
+        if saved_file:
+            print(f"Saved weather data to {saved_file}")
+            print(f"Records: {len(weather_data)}")
+            print(f"Date range: {weather_data['time'].min()} to {weather_data['time'].max()}")
+        
+        # Analyze weather data if analysis function exists
+        if hasattr(exploratory, 'analyze_weather_data'):
+            exploratory.analyze_weather_data(
+                weather_data,
+                output_dir=os.path.join(config.FIGURES_DIR, "weather_eda"),
+                debug_dir=config.DEBUG_DIR
+            )
+        else:
+            print("Weather data analysis function not yet implemented")
+    else:
+        print(f"Failed to fetch weather data for {first_location}")
     
     print("\nExecution complete")
 

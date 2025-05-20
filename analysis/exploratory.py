@@ -12,7 +12,8 @@ from utils.visualization import (
     plot_time_series_with_acf_pacf,
     plot_average_by_hour,
     plot_hourly_boxplots,
-    create_joint_pollutant_visualizations
+    create_joint_pollutant_visualizations,
+    create_joint_weather_visualizations
 )
 
 from data import traffic
@@ -347,5 +348,98 @@ def analyze_air_quality_data(df, output_dir=None, debug_dir=None):
     # Return summaries
     return {
         'pollutant_summaries': pollutant_summaries,
+        'output_dir': output_dir
+    }
+
+def analyze_weather_data(df, output_dir=None, debug_dir=None):
+    """
+    Perform exploratory analysis on weather data.
+    
+    Args:
+        df: DataFrame with weather data
+        output_dir: Directory to save figures
+        debug_dir: Directory to save debug files
+    
+    Returns:
+        dict: Summary of analyses for each weather variable
+    """
+    print("\nPerforming exploratory analysis on weather data...")
+    
+    if df is None or len(df) == 0:
+        print("No weather data to analyze")
+        return None
+    
+    # Setup output directory
+    if output_dir is None:
+        output_dir = "figures/weather_eda"
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Save raw data to CSV if debug_dir provided
+    if debug_dir:
+        filename = "weather_data"
+        saved_file = save_data_to_csv(df, filename, debug_dir)
+        if saved_file:
+            print(f"Saved raw weather data to {saved_file}")
+            print(f"Records: {len(df)}")
+            print(f"Date range: {df['time'].min()} to {df['time'].max()}")
+            
+            # Display sample of the data
+            print("\nSample of weather data:")
+            print(df.head().to_string())
+    
+    # Identify weather variable columns
+    time_col = 'time'
+    potential_weather_cols = [
+        'temperature_2m', 'relative_humidity_2m', 'precipitation',
+        'windspeed_10m', 'pressure_msl', 'winddirection_10m'
+    ]
+    
+    weather_cols = [col for col in potential_weather_cols if col in df.columns]
+    
+    if not weather_cols:
+        print("No weather variable columns found in data")
+        return None
+    
+    print(f"Found {len(weather_cols)} weather variables: {', '.join(weather_cols)}")
+    
+    # Create joint visualizations
+    print("\nCreating joint weather visualizations...")
+    create_joint_weather_visualizations(
+        df, 
+        weather_cols, 
+        time_col,
+        output_dir
+    )
+    
+    # Perform individual weather variable analysis
+    weather_summaries = {}
+    
+    for variable in weather_cols:
+        # Perform timeseries EDA for each weather variable
+        print(f"\nAnalyzing {variable}...")
+        
+        # Create weather variable subdirectory
+        variable_dir = os.path.join(output_dir, variable.replace("_", "-"))
+        
+        summary = perform_timeseries_eda(
+            df,
+            value_col=variable,
+            time_col=time_col,
+            output_dir=variable_dir
+        )
+        
+        if summary:
+            weather_summaries[variable] = summary
+            
+            # Print key stats
+            print(f"  - Average: {summary['statistics']['mean']:.2f}")
+            print(f"  - Peak hour: {summary['hourly_patterns']['peak_hour']:02d}:00 ({summary['hourly_patterns']['peak_value']:.2f})")
+            print(f"  - Daily pattern: Highest on {summary['daily_patterns']['busiest_day']}")
+    
+    print(f"\nWeather analysis complete. Visualizations saved to {output_dir}")
+    
+    # Return summaries
+    return {
+        'weather_summaries': weather_summaries,
         'output_dir': output_dir
     }
