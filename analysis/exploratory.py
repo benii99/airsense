@@ -11,7 +11,8 @@ from datetime import datetime
 from utils.visualization import (
     plot_time_series_with_acf_pacf,
     plot_average_by_hour,
-    plot_hourly_boxplots
+    plot_hourly_boxplots,
+    create_joint_pollutant_visualizations
 )
 
 from data import traffic
@@ -247,3 +248,104 @@ def analyze_traffic_data(traffic_file, output_dir=None, debug_dir=None):
         print("\nEDA analysis failed")
     
     return traffic_data, eda_results
+
+def analyze_air_quality_data(df, output_dir=None, debug_dir=None):
+    """
+    Perform exploratory analysis on air quality data with multiple pollutants.
+    
+    Args:
+        df: DataFrame with air quality data
+        output_dir: Directory to save figures
+        debug_dir: Directory to save debug files
+    
+    Returns:
+        dict: Summary of analyses for each pollutant
+    """
+    print("\nPerforming exploratory analysis on air quality data...")
+    
+    if df is None or len(df) == 0:
+        print("No air quality data to analyze")
+        return None
+    
+    # Setup output directory
+    if output_dir is None:
+        output_dir = "figures/air_quality_eda"
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Save raw data to CSV if debug_dir provided
+    if debug_dir:
+        filename = "air_quality_data"
+        saved_file = save_data_to_csv(df, filename, debug_dir)
+        if saved_file:
+            print(f"Saved raw air quality data to {saved_file}")
+            print(f"Records: {len(df)}")
+            print(f"Date range: {df['time'].min()} to {df['time'].max()}")
+            
+            # Display sample of the data
+            print("\nSample of air quality data:")
+            print(df.head().to_string())
+    
+    # Identify pollutant columns and check which ones have valid data
+    time_col = 'time'
+    potential_pollutant_cols = [
+        'pm10', 'pm2_5', 'nitrogen_dioxide', 'carbon_monoxide', 'sulphur_dioxide', 'ozone'
+    ]
+    
+    # Filter to only include columns with sufficient valid data
+    pollutant_cols = []
+    for col in potential_pollutant_cols:
+        if col in df.columns:
+            valid_count = df[col].notna().sum()
+            if valid_count > 100:  # Require at least 100 valid data points
+                pollutant_cols.append(col)
+                print(f"  {col}: {valid_count} valid values ({valid_count/len(df)*100:.1f}%)")
+            else:
+                print(f"  {col}: Insufficient valid data ({valid_count} values) - skipping")
+    
+    if not pollutant_cols:
+        print("No pollutant columns with sufficient valid data found")
+        return None
+    
+    print(f"Found {len(pollutant_cols)} pollutants with sufficient data: {', '.join(pollutant_cols)}")
+    
+    # Create joint visualizations
+    print("\nCreating joint pollutant visualizations...")
+    create_joint_pollutant_visualizations(
+        df, 
+        pollutant_cols, 
+        time_col,
+        output_dir
+    )
+    
+    # Perform individual pollutant analysis
+    pollutant_summaries = {}
+    
+    for pollutant in pollutant_cols:
+        # Perform timeseries EDA for each pollutant
+        print(f"\nAnalyzing {pollutant}...")
+        
+        # Create pollutant subdirectory
+        pollutant_dir = os.path.join(output_dir, pollutant.replace("_", "-"))
+        
+        summary = perform_timeseries_eda(
+            df,
+            value_col=pollutant,
+            time_col=time_col,
+            output_dir=pollutant_dir
+        )
+        
+        if summary:
+            pollutant_summaries[pollutant] = summary
+            
+            # Print key stats
+            print(f"  - Average: {summary['statistics']['mean']:.2f}")
+            print(f"  - Peak hour: {summary['hourly_patterns']['peak_hour']:02d}:00 ({summary['hourly_patterns']['peak_value']:.2f})")
+            print(f"  - Daily pattern: Highest on {summary['daily_patterns']['busiest_day']}")
+    
+    print(f"\nAir quality analysis complete. Visualizations saved to {output_dir}")
+    
+    # Return summaries
+    return {
+        'pollutant_summaries': pollutant_summaries,
+        'output_dir': output_dir
+    }

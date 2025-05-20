@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +159,7 @@ def plot_hourly_boxplots(df, value_col='traffic_count', figsize=(15, 8), output_
         output_path: Path to save the figure
         
     Returns:
-        fig: The matplotlib figure object
+        fig: The matplotlib figure object or None if unable to create
     """
     # Extract hour from datetime
     if 'hour_of_day' not in df.columns:
@@ -169,27 +170,130 @@ def plot_hourly_boxplots(df, value_col='traffic_count', figsize=(15, 8), output_
             logger.error("DataFrame must contain 'datetime' column")
             return None
     
+    # Check if we have enough valid data
+    valid_data = df.dropna(subset=[value_col])
+    if len(valid_data) < 24:  # At least need some data for each hour
+        logger.warning(f"Insufficient valid data for {value_col} boxplots (only {len(valid_data)} valid rows)")
+        return None
+    
     # Create figure
     fig, ax = plt.subplots(figsize=figsize)
     
-    # Create box plots
-    sns.boxplot(x='hour_of_day', y=value_col, data=df, ax=ax)
+    try:
+        # Create box plots - handling potential errors
+        sns.boxplot(x='hour_of_day', y=value_col, data=valid_data, ax=ax)
+        
+        # Format plot
+        ax.set_title(f"Distribution of {value_col} by Hour of Day", fontsize=14)
+        ax.set_xlabel("Hour of Day", fontsize=12)
+        ax.set_ylabel(value_col, fontsize=12)
+        ax.grid(True, alpha=0.3, axis='y')
+        
+        plt.tight_layout()
+        
+        # Save figure if output_path provided
+        if output_path:
+            directory = os.path.dirname(output_path)
+            if directory:
+                os.makedirs(directory, exist_ok=True)
+            plt.savefig(output_path, dpi=300, bbox_inches='tight')
+            logger.info(f"Saved hourly boxplot to {output_path}")
+        
+        return fig
+    except Exception as e:
+        logger.error(f"Error creating boxplot for {value_col}: {str(e)}")
+        plt.close(fig)
+        return None
+
+
+def create_joint_pollutant_visualizations(df, pollutant_cols, time_col='time', output_dir=None):
+    """
+    Create joint visualizations for multiple pollutants.
     
-    # Format plot
-    ax.set_title(f"Distribution of {value_col} by Hour of Day", fontsize=14)
-    ax.set_xlabel("Hour of Day", fontsize=12)
-    ax.set_ylabel(value_col, fontsize=12)
-    ax.set_xticks(range(24))
-    ax.grid(True, alpha=0.3, axis='y')
+    Args:
+        df: DataFrame with pollutant data
+        pollutant_cols: List of column names for pollutants
+        time_col: Column name for time data
+        output_dir: Directory to save output figures
+    """
+    if not pollutant_cols or len(pollutant_cols) == 0:
+        return
+    
+    # Create timestamp for filenames
+    timestamp = datetime.now().strftime("%Y%m%d")
+    
+    # Ensure output directory exists
+    if output_dir is None:
+        output_dir = "figures/air_quality_eda"
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # 1. Create time series plot for all pollutants
+    plt.figure(figsize=(15, 8))
+    
+    for pollutant in pollutant_cols:
+        # Scale value to fit on same plot (normalize to 0-1)
+        series = df[pollutant]
+        if series.max() == series.min():
+            # Handle constant case
+            normalized = series / series.max() if series.max() != 0 else series
+        else:
+            normalized = (series - series.min()) / (series.max() - series.min())
+        
+        plt.plot(df[time_col], normalized, label=pollutant, alpha=0.7)
+    
+    plt.title("Normalized Pollutant Levels Over Time")
+    plt.xlabel("Time")
+    plt.ylabel("Normalized Level (0-1)")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}/{timestamp}_joint_pollutant_timeseries.png", dpi=300)
+    plt.close()
+    
+    # 2. Create hourly average comparison
+    df_with_hour = df.copy()
+    df_with_hour['hour_of_day'] = df_with_hour[time_col].dt.hour
+    
+    hourly_avgs = {}
+    for pollutant in pollutant_cols:
+        hourly_avgs[pollutant] = df_with_hour.groupby('hour_of_day')[pollutant].mean()
+    
+    plt.figure(figsize=(15, 8))
+    
+    for pollutant, values in hourly_avgs.items():
+        plt.plot(values.index, values.values, 'o-', label=pollutant, alpha=0.7)
+    
+    plt.title("Average Pollutant Levels by Hour of Day")
+    plt.xlabel("Hour of Day")
+    plt.ylabel("Concentration")
+    plt.legend()
+    plt.xticks(range(24))
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}/{timestamp}_joint_pollutant_hourly_averages.png", dpi=300)
+    plt.close()
+    
+    # 3. Create histograms for all pollutants
+    fig, axes = plt.subplots(len(pollutant_cols), 1, figsize=(12, 3*len(pollutant_cols)))
+    
+    for i, pollutant in enumerate(pollutant_cols):
+        ax = axes[i] if len(pollutant_cols) > 1 else axes
+        
+        ax.hist(df[pollutant].dropna(), bins=50, alpha=0.7)
+        ax.set_title(f"Distribution of {pollutant}")
+        ax.set_xlabel("Concentration")
+        ax.set_ylabel("Frequency")
+        ax.grid(True, alpha=0.3)
     
     plt.tight_layout()
+    plt.savefig(f"{output_dir}/{timestamp}_joint_pollutant_histograms.png", dpi=300)
+    plt.close()
     
-    # Save figure if output_path provided
-    if output_path:
-        directory = os.path.dirname(output_path)
-        if directory:
-            os.makedirs(directory, exist_ok=True)
-        plt.savefig(output_path, dpi=300, bbox_inches='tight')
-        logger.info(f"Saved hourly boxplot to {output_path}")
-    
-    return fig
+    # 4. Create correlation heatmap between pollutants
+    plt.figure(figsize=(10, 8))
+    corr_matrix = df[pollutant_cols].corr()
+    sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', vmin=-1, vmax=1, center=0)
+    plt.title("Correlation Between Pollutants")
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}/{timestamp}_pollutant_correlation_heatmap.png", dpi=300)
+    plt.close()
